@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>John's Flawless Trade Tool</title>
+<title>John's Flawless Trade Tool That Is Never Wrong</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
@@ -112,6 +112,30 @@ tr.changed td{background:#FBF6E7}
 .err{background:var(--loss-bg);border-left:3px solid var(--loss);padding:12px 14px;margin-top:14px;font-size:15px}
 .muted{color:var(--ink-soft);font-size:14px}
 .hidden{display:none}
+
+/* ---------- Verdict overlay ---------- */
+#stage{
+  position:fixed;inset:0;z-index:99;display:flex;align-items:center;justify-content:center;
+  background:rgba(22,32,43,.72);opacity:0;pointer-events:none
+}
+#stage.on{opacity:1;animation:stagefade 1500ms ease forwards}
+#stage figure{margin:0;text-align:center}
+#stage .art{width:132px;height:132px;display:block;margin:0 auto;animation:spin 1200ms cubic-bezier(.3,.9,.3,1) forwards}
+#stage .art svg{width:100%;height:100%;display:block}
+#stage figcaption{
+  font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:26px;color:#fff;
+  margin-top:14px;letter-spacing:.02em;text-shadow:0 1px 3px rgba(0,0,0,.5)
+}
+@keyframes spin{
+  0%{transform:rotate(0) scale(.35);opacity:0}
+  22%{opacity:1}
+  100%{transform:rotate(720deg) scale(1);opacity:1}
+}
+@keyframes stagefade{0%{opacity:0}12%{opacity:1}78%{opacity:1}100%{opacity:0}}
+@media(prefers-reduced-motion:reduce){
+  #stage.on{animation:stagefade 900ms ease forwards}
+  #stage .art{animation:none}
+}
 footer{margin-top:34px;padding-top:14px;border-top:1px solid var(--rule);font-size:14px;color:var(--ink-soft)}
 footer a{color:var(--ink)}
 .credit{display:inline-block;background:var(--ink);color:#fff;padding:3px 8px;font-size:13px;
@@ -128,18 +152,18 @@ footer a{color:var(--ink)}
 
 <header>
   <h1>John's Flawless Trade Tool That Is Never Wrong</h1>
-  <p>A Sleeper trade analyzer that has no issues and uses super reliable data. I have a poop fetish.</p>
+  <p>I have a poop fetish.</p>
 </header>
 
 <!-- ============ STEP 1: find the user's leagues ============ -->
 <section class="panel" id="p-user">
   <h2>Start with your Sleeper username</h2>
-  <p class="hint">All data is stored and sold to malicious companies without your consent.</p>
+  <p class="hint">Your data is stored and sold to malicious companies.</p>
   <div class="row">
     <div>
       <label for="uname">Sleeper username</label>
       <input type="text" id="uname" autocomplete="username" autocapitalize="off"
-             autocorrect="off" spellcheck="false" placeholder="e.g. monkeycum86">
+             autocorrect="off" spellcheck="false" placeholder="e.g. donkeycum86">
     </div>
     <div style="flex:0 0 auto">
       <button id="btn-load">Load my leagues</button>
@@ -180,18 +204,24 @@ footer a{color:var(--ink)}
     </div>
   </div>
   <div class="row" style="margin-top:14px">
+    <div style="flex:0 0 auto"><button id="btn-submit" disabled>Analyze this trade</button></div>
     <div style="flex:0 0 auto"><button id="btn-clear" class="ghost">Clear selection</button></div>
     <div style="flex:0 0 auto"><button id="btn-names" class="ghost">Fill in missing names</button></div>
   </div>
   <p class="muted" id="names-note" style="margin-top:8px"></p>
 </section>
 
+<!-- Verdict overlay: fires on submit, tier chosen by the lineup delta -->
+<div id="stage" aria-hidden="true"><figure><span class="art"></span><figcaption></figcaption></figure></div>
+
 <!-- ============ STEP 4: the verdict ============ -->
 <div id="out"></div>
 
 <footer>
   <p><span class="credit">Player values: <a href="https://fantasycalc.com" target="_blank" rel="noopener">FantasyCalc</a></span>
-     &nbsp; Value data by FantasyCalc. Fuck you.</p>
+     &nbsp; Redraft values, standard scoring, calculated by FantasyCalc from millions of
+     real fantasy trades and refreshed several times a day. League and roster data from the
+     Sleeper API. This tool is not affiliated with either.</p>
 </footer>
 
 </div>
@@ -205,6 +235,52 @@ footer a{color:var(--ink)}
 -------------------------------------------------------------------*/
 const SLEEPER = "https://api.sleeper.app/v1";
 const FANTASYCALC = "https://api.fantasycalc.com/values/current";
+
+/* ------------------------------------------------------------------
+   Verdict tiers. Drop your own files in /assets and change the paths
+   here; nothing else needs editing. If an icon file is missing the
+   built-in SVG below is drawn instead, so the page never shows a
+   broken image. A missing sound just plays nothing.
+
+   METRIC decides which number picks the tier: "lineup" is the change
+   to your starting lineup, "market" is raw FantasyCalc value.
+   A delta of exactly zero falls into "loss" — change the tier()
+   function if you'd rather it counted as a win.
+-------------------------------------------------------------------*/
+const METRIC = "lineup";
+const VERDICT = {
+  loss: {
+    icon: "assets/loss.svg",
+    sound: "assets/loss.mp3",
+    caption: "You lose this one"
+  },
+  small: {
+    icon: "assets/gain-small.svg",
+    sound: "assets/gain-small.mp3",
+    caption: "Marginal win"
+  },
+  big: {
+    icon: "assets/gain-big.svg",
+    sound: "assets/gain-big.mp3",
+    caption: "Send the offer"
+  }
+};
+const FALLBACK_ART = {
+  loss: `<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" fill="#A32B25"/>
+    <path d="M32 32 L68 68 M68 32 L32 68" stroke="#fff" stroke-width="10" stroke-linecap="round"/></svg>`,
+  small: `<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" fill="#C77B26"/>
+    <path d="M50 26 L50 74 M32 44 L50 26 L68 44" stroke="#fff" stroke-width="9"
+    stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>`,
+  big: `<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" fill="#1D6F42"/>
+    <path d="M28 52 L44 68 L73 33" stroke="#fff" stroke-width="11"
+    stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>`
+};
+function tier(v) {
+  if (v > 500) return "big";
+  if (v > 0) return "small";
+  return "loss";
+}
+
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const fmt = n => Math.round(n).toLocaleString();
@@ -429,7 +505,7 @@ function renderRosters() {
   draw(S.myRoster.players, S.send, "list-mine");
   draw(S.theirRoster.players, S.get, "list-theirs");
   $("p-trade").classList.remove("hidden");
-  analyze();
+  refreshSubmit();
 }
 
 /* ------------------------------------------------------------------
@@ -441,7 +517,7 @@ function analyze() {
   const out = $("out");
   if (!S.send.size && !S.get.size) {
     out.innerHTML = "";
-    return;
+    return null;
   }
   const send = [...S.send], get = [...S.get];
   const mine = S.myRoster.players || [], theirs = S.theirRoster.players || [];
@@ -551,6 +627,76 @@ function analyze() {
     Sleeper enforces roster size limits, so the manager receiving more players may need to drop someone
     before it can go through \u2014 and that drop is a real cost this tool doesn't count.</div>` : ""}
   `;
+
+  return { lineup, market, theirLineup };
+}
+
+/* ------------------------------------------------------------------
+   Submit handler. Runs the analysis, picks a tier from the delta, and
+   fires the icon and sound. Audio has to start inside the click event
+   itself \u2014 iOS Safari refuses playback that isn't tied to a user
+   gesture, and any await before .play() breaks that chain. The
+   analysis is synchronous, so this ordering is safe.
+-------------------------------------------------------------------*/
+const sounds = {};
+function submitTrade() {
+  const res = analyze();
+  if (!res) return;
+  const t = tier(METRIC === "market" ? res.market : res.lineup);
+  const cfg = VERDICT[t];
+
+  if (cfg.sound) {
+    try {
+      if (!sounds[t]) sounds[t] = new Audio(cfg.sound);
+      sounds[t].currentTime = 0;
+      const p = sounds[t].play();
+      if (p && p.catch) p.catch(() => {});   // missing file, or autoplay refused
+    } catch (e) { /* audio is decorative; never block the result on it */ }
+  }
+
+  showArt(t, cfg);
+}
+
+/* ------------------------------------------------------------------
+   Draw the overlay: spin the icon for about a second and a half, then
+   clear it and scroll the written result into view. The icon falls
+   back to inline SVG if the configured file is missing.
+-------------------------------------------------------------------*/
+let stageTimer = null;
+function showArt(t, cfg) {
+  const stage = $("stage");
+  const art = stage.querySelector(".art");
+  stage.querySelector("figcaption").textContent = cfg.caption || "";
+
+  art.innerHTML = FALLBACK_ART[t] || "";
+  if (cfg.icon) {
+    const img = new Image();
+    img.onload = () => { art.innerHTML = ""; art.appendChild(img); };
+    img.alt = "";
+    img.src = cfg.icon;                       // onerror leaves the fallback in place
+  }
+
+  clearTimeout(stageTimer);
+  stage.classList.remove("on");
+  void stage.offsetWidth;                     // restart the CSS animation
+  stage.classList.add("on");
+  stageTimer = setTimeout(() => {
+    stage.classList.remove("on");
+    const out = $("out");
+    if (out.firstElementChild) out.firstElementChild.scrollIntoView({ block: "start", behavior: "smooth" });
+  }, 1500);
+}
+
+/* ------------------------------------------------------------------
+   Enable the submit button only when something is on the table, and
+   drop any stale result the moment the selection changes.
+-------------------------------------------------------------------*/
+function refreshSubmit() {
+  const n = S.send.size + S.get.size;
+  $("btn-submit").disabled = n === 0;
+  $("btn-submit").textContent = n === 0 ? "Analyze this trade"
+    : `Analyze ${S.send.size} for ${S.get.size}`;
+  $("out").innerHTML = "";
 }
 
 /* ------------------------------------------------------------------
@@ -636,6 +782,7 @@ $("uname").addEventListener("keydown", e => { if (e.key === "Enter") loadUser();
 $("league").addEventListener("change", loadLeague);
 $("partner").addEventListener("change", renderRosters);
 $("btn-names").addEventListener("click", loadNames);
+$("btn-submit").addEventListener("click", submitTrade);
 $("btn-clear").addEventListener("click", () => { S.send.clear(); S.get.clear(); renderRosters(); });
 
 document.addEventListener("click", e => {
@@ -645,7 +792,7 @@ document.addEventListener("click", e => {
   const set = chip.dataset.side === "list-mine" ? S.send : S.get;
   set.has(id) ? set.delete(id) : set.add(id);
   chip.setAttribute("aria-pressed", set.has(id));
-  analyze();
+  refreshSubmit();
 });
 </script>
 </body>
