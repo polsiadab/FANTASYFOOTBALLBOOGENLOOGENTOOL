@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Depth Chart — Sleeper trade analyzer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#16202B;
+  --ink-soft:#5A6873;
+  --paper:#EDEFF1;
+  --card:#FFFFFF;
+  --rule:#CBD2D8;
+  --gain:#1D6F42;
+  --loss:#A32B25;
+  --gain-bg:#E4F0E8;
+  --loss-bg:#F6E5E4;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--paper);
+  color:var(--ink);
+  font-family:'Barlow',system-ui,-apple-system,sans-serif;
+  font-size:16px;
+  line-height:1.5;
+  -webkit-text-size-adjust:100%;
+  padding:0 16px calc(48px + env(safe-area-inset-bottom));
+}
+.wrap{max-width:760px;margin:0 auto}
+h1,h2,h3,.cond{font-family:'Barlow Condensed',system-ui,sans-serif;font-weight:600;letter-spacing:.01em}
+
+/* ---------- Masthead ---------- */
+header{padding:28px 0 20px;border-bottom:2px solid var(--ink)}
+h1{font-size:38px;line-height:1;margin:0;font-weight:700}
+header p{margin:8px 0 0;max-width:52ch;color:var(--ink-soft);font-size:15px}
+
+/* ---------- Panels ---------- */
+.panel{background:var(--card);border:1px solid var(--rule);margin-top:18px;padding:18px}
+.panel h2{font-size:22px;margin:0 0 4px;line-height:1.15}
+.panel .hint{color:var(--ink-soft);font-size:14px;margin:0 0 14px}
+
+/* ---------- Form controls ---------- */
+label{display:block;font-family:'Barlow Condensed',sans-serif;font-size:17px;font-weight:600;margin-bottom:5px}
+input,select,button{font-family:inherit;font-size:16px}
+input[type=text],select{
+  width:100%;padding:12px;border:1px solid var(--rule);background:#fff;
+  color:var(--ink);border-radius:2px;min-height:46px
+}
+input:focus-visible,select:focus-visible,button:focus-visible,.chip:focus-visible{
+  outline:3px solid #2F6FB0;outline-offset:1px
+}
+button{
+  background:var(--ink);color:#fff;border:none;padding:13px 20px;border-radius:2px;
+  cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:17px;min-height:46px
+}
+button:disabled{opacity:.4;cursor:default}
+button.ghost{background:none;color:var(--ink);border:1px solid var(--rule)}
+.row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap}
+.row>div{flex:1 1 220px}
+
+/* ---------- Roster / trade columns ---------- */
+.cols{display:grid;grid-template-columns:1fr;gap:16px}
+@media(min-width:680px){.cols{grid-template-columns:1fr 1fr}}
+.colhead{font-family:'Barlow Condensed',sans-serif;font-size:19px;font-weight:600;
+  padding-bottom:6px;border-bottom:1px solid var(--ink);margin-bottom:8px}
+.chip{
+  display:flex;align-items:center;gap:9px;width:100%;text-align:left;
+  background:#fff;border:1px solid var(--rule);border-left:3px solid var(--rule);
+  padding:9px 10px;margin-bottom:5px;cursor:pointer;min-height:46px;border-radius:0;color:var(--ink)
+}
+.chip[aria-pressed=true]{background:var(--ink);color:#fff;border-color:var(--ink)}
+.chip .pos{
+  font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;
+  width:34px;flex:0 0 34px;text-align:center;padding:2px 0;background:#E3E7EA;color:var(--ink);border-radius:2px
+}
+.chip[aria-pressed=true] .pos{background:#3C4A57;color:#fff}
+.chip .nm{flex:1;font-size:15px;line-height:1.2}
+.chip .nm small{display:block;color:var(--ink-soft);font-size:12px}
+.chip[aria-pressed=true] .nm small{color:#B4BEC7}
+.chip .val{font-variant-numeric:tabular-nums;font-size:14px;color:var(--ink-soft)}
+.chip[aria-pressed=true] .val{color:#DDE3E8}
+.pos-QB{border-left-color:#8E5BA6}.pos-RB{border-left-color:#1D6F42}
+.pos-WR{border-left-color:#2F6FB0}.pos-TE{border-left-color:#C77B26}
+.pos-K{border-left-color:#8A8F94}.pos-DEF{border-left-color:#5A4632}
+
+/* ---------- Verdict ---------- */
+.verdict{border:2px solid var(--ink);padding:20px;margin-top:18px;background:#fff}
+.bignum{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:60px;line-height:.95;
+  font-variant-numeric:tabular-nums;display:block}
+.bignum.up{color:var(--gain)}.bignum.down{color:var(--loss)}
+.bignum.flat{color:var(--ink-soft)}
+.verdict .cap{font-size:15px;color:var(--ink-soft);margin:2px 0 0}
+.verdict .call{font-size:17px;margin:16px 0 0;max-width:60ch}
+.split{display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start}
+
+/* ---------- Tables ---------- */
+table{width:100%;border-collapse:collapse;font-size:15px;margin-top:6px}
+th{font-family:'Barlow Condensed',sans-serif;font-size:15px;text-align:left;
+  border-bottom:1px solid var(--ink);padding:5px 6px;font-weight:600}
+td{padding:6px;border-bottom:1px solid var(--rule);vertical-align:top}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+tr.changed td{background:#FBF6E7}
+.delta{font-variant-numeric:tabular-nums;font-weight:600}
+.delta.up{color:var(--gain)}.delta.down{color:var(--loss)}
+
+.note{background:var(--gain-bg);border-left:3px solid var(--gain);padding:12px 14px;margin-top:14px;font-size:15px}
+.note.warn{background:var(--loss-bg);border-left-color:var(--loss)}
+.err{background:var(--loss-bg);border-left:3px solid var(--loss);padding:12px 14px;margin-top:14px;font-size:15px}
+.muted{color:var(--ink-soft);font-size:14px}
+.hidden{display:none}
+footer{margin-top:34px;padding-top:14px;border-top:1px solid var(--rule);font-size:14px;color:var(--ink-soft)}
+footer a{color:var(--ink)}
+.credit{display:inline-block;background:var(--ink);color:#fff;padding:3px 8px;font-size:13px;
+  font-family:'Barlow Condensed',sans-serif;font-weight:600;border-radius:2px}
+.credit a{color:#fff;text-decoration:underline}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid var(--rule);
+  border-top-color:var(--ink);border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px;margin-right:7px}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.spin{animation:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Depth Chart</h1>
+  <p>A Sleeper trade analyzer that scores a deal by what it does to your starting
+     lineup, not just by what the players are worth. A star you can replace off your
+     own bench costs you less than the market price says.</p>
+</header>
+
+<!-- ============ STEP 1: find the user's leagues ============ -->
+<section class="panel" id="p-user">
+  <h2>Start with your Sleeper username</h2>
+  <p class="hint">Public data only. Nothing is stored and nothing is sent anywhere but Sleeper and FantasyCalc.</p>
+  <div class="row">
+    <div>
+      <label for="uname">Sleeper username</label>
+      <input type="text" id="uname" autocomplete="username" autocapitalize="off"
+             autocorrect="off" spellcheck="false" placeholder="e.g. seguingis">
+    </div>
+    <div style="flex:0 0 auto">
+      <button id="btn-load">Load my leagues</button>
+    </div>
+  </div>
+  <div id="user-msg"></div>
+</section>
+
+<!-- ============ STEP 2: pick league + partner ============ -->
+<section class="panel hidden" id="p-league">
+  <h2>Pick the league and the other manager</h2>
+  <p class="hint">Values are pulled for your league's size and quarterback format, in standard scoring.</p>
+  <div class="row">
+    <div>
+      <label for="league">League</label>
+      <select id="league"></select>
+    </div>
+    <div>
+      <label for="partner">Trading with</label>
+      <select id="partner"><option value="">Pick a league first</option></select>
+    </div>
+  </div>
+  <div id="league-msg"></div>
+</section>
+
+<!-- ============ STEP 3: build the trade ============ -->
+<section class="panel hidden" id="p-trade">
+  <h2>Tap the players changing hands</h2>
+  <p class="hint">Selected players move to the other roster. Tap again to take them back.</p>
+  <div class="cols">
+    <div>
+      <div class="colhead" id="head-mine">You send</div>
+      <div id="list-mine"></div>
+    </div>
+    <div>
+      <div class="colhead" id="head-theirs">You get</div>
+      <div id="list-theirs"></div>
+    </div>
+  </div>
+  <div class="row" style="margin-top:14px">
+    <div style="flex:0 0 auto"><button id="btn-clear" class="ghost">Clear selection</button></div>
+    <div style="flex:0 0 auto"><button id="btn-names" class="ghost">Fill in missing names</button></div>
+  </div>
+  <p class="muted" id="names-note" style="margin-top:8px"></p>
+</section>
+
+<!-- ============ STEP 4: the verdict ============ -->
+<div id="out"></div>
+
+<footer>
+  <p><span class="credit">Player values: <a href="https://fantasycalc.com" target="_blank" rel="noopener">FantasyCalc</a></span>
+     &nbsp; Redraft values, standard scoring, calculated by FantasyCalc from millions of
+     real fantasy trades and refreshed several times a day. League and roster data from the
+     Sleeper API. This tool is not affiliated with either.</p>
+</footer>
+
+</div>
+<script>
+"use strict";
+
+/* ------------------------------------------------------------------
+   Config and tiny helpers.
+   All data is public and unauthenticated, so this whole app can run
+   as a static page with no server and no API keys.
+-------------------------------------------------------------------*/
+const SLEEPER = "https://api.sleeper.app/v1";
+const FANTASYCALC = "https://api.fantasycalc.com/values/current";
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const fmt = n => Math.round(n).toLocaleString();
+const signed = n => (n > 0 ? "+" : n < 0 ? "\u2212" : "\u00B1") + fmt(Math.abs(n));
+
+async function getJSON(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(url + " returned " + r.status);
+  return r.json();
+}
+
+/* ------------------------------------------------------------------
+   Lineup slot eligibility. Sleeper stores a league's starting lineup
+   as an ordered array like ["QB","RB","RB","WR","WR","TE","FLEX","K","DEF","BN","BN"].
+   BN / IR / TAXI are not starting slots and are dropped.
+-------------------------------------------------------------------*/
+const ELIG = {
+  QB:["QB"], RB:["RB"], WR:["WR"], TE:["TE"], K:["K"], DEF:["DEF"],
+  FLEX:["RB","WR","TE"],
+  WRRB_FLEX:["RB","WR"],
+  REC_FLEX:["WR","TE"],
+  WRRB_WRT:["RB","WR","TE"],
+  SUPER_FLEX:["QB","RB","WR","TE"]
+};
+const BENCH = new Set(["BN","IR","TAXI"]);
+const SLOT_LABEL = { SUPER_FLEX:"SFLEX", WRRB_FLEX:"W/R", REC_FLEX:"W/T", WRRB_WRT:"FLEX", DEF:"D/ST" };
+
+/* ------------------------------------------------------------------
+   Application state. Kept in one object so every render reads from
+   a single source of truth.
+-------------------------------------------------------------------*/
+const S = {
+  season:null, userId:null, leagues:[], league:null,
+  rosters:[], users:{}, myRoster:null, theirRoster:null,
+  slots:[], values:{}, names:{},
+  send:new Set(), get:new Set()
+};
+
+/* ------------------------------------------------------------------
+   Resolve the username, then list their NFL leagues for the current
+   season. Sleeper's /state endpoint tells us which season is live so
+   the page never needs a hardcoded year.
+-------------------------------------------------------------------*/
+async function loadUser() {
+  const name = $("uname").value.trim();
+  if (!name) return;
+  const msg = $("user-msg");
+  $("btn-load").disabled = true;
+  msg.innerHTML = '<p class="muted"><span class="spin"></span>Looking up your leagues\u2026</p>';
+  try {
+    let state;
+    try { state = await getJSON(SLEEPER + "/state/nfl"); } catch { state = {}; }
+    S.season = state.league_season || state.season || String(new Date().getFullYear());
+
+    const user = await getJSON(SLEEPER + "/user/" + encodeURIComponent(name));
+    if (!user || !user.user_id) throw new Error("no-user");
+    S.userId = user.user_id;
+
+    let leagues = await getJSON(`${SLEEPER}/user/${S.userId}/leagues/nfl/${S.season}`);
+    if (!leagues.length && Number(S.season) > 2000) {
+      S.season = String(Number(S.season) - 1);
+      leagues = await getJSON(`${SLEEPER}/user/${S.userId}/leagues/nfl/${S.season}`);
+    }
+    if (!leagues.length) throw new Error("no-leagues");
+
+    S.leagues = leagues;
+    msg.innerHTML = "";
+    $("league").innerHTML = leagues.map(l =>
+      `<option value="${esc(l.league_id)}">${esc(l.name)} \u2014 ${l.total_rosters} teams</option>`).join("");
+    $("p-league").classList.remove("hidden");
+    await loadLeague();
+  } catch (e) {
+    msg.innerHTML = '<div class="err">' + explain(e, name) + "</div>";
+  } finally {
+    $("btn-load").disabled = false;
+  }
+}
+
+/* ------------------------------------------------------------------
+   Turn a thrown error into something a person can act on. Network
+   failures here are almost always a blocked cross-origin request or
+   a username typo, so name both.
+-------------------------------------------------------------------*/
+function explain(e, name) {
+  if (e.message === "no-user") return `No Sleeper account named <strong>${esc(name)}</strong>. Usernames are not display names \u2014 check the account tab in the Sleeper app.`;
+  if (e.message === "no-leagues") return "That account has no NFL leagues for this season or last.";
+  return "Could not reach the data source. If the page works locally but not once hosted, the browser is blocking the cross-origin request \u2014 see the CORS note in the README.";
+}
+
+/* ------------------------------------------------------------------
+   Load one league: settings, rosters, managers, and the matching
+   FantasyCalc value set. Format is inferred from the league's own
+   starting slots so a superflex league gets superflex quarterback
+   values instead of one-QB values.
+-------------------------------------------------------------------*/
+async function loadLeague() {
+  const id = $("league").value;
+  const msg = $("league-msg");
+  msg.innerHTML = '<p class="muted"><span class="spin"></span>Loading rosters and values\u2026</p>';
+  $("p-trade").classList.add("hidden");
+  $("out").innerHTML = "";
+  S.send.clear(); S.get.clear();
+  try {
+    const [league, rosters, users] = await Promise.all([
+      getJSON(`${SLEEPER}/league/${id}`),
+      getJSON(`${SLEEPER}/league/${id}/rosters`),
+      getJSON(`${SLEEPER}/league/${id}/users`)
+    ]);
+    S.league = league;
+    S.rosters = rosters;
+    S.users = Object.fromEntries(users.map(u => [u.user_id, u.display_name || u.username || "Manager"]));
+    S.slots = (league.roster_positions || []).filter(p => !BENCH.has(p));
+
+    S.myRoster = rosters.find(r => r.owner_id === S.userId) ||
+                 rosters.find(r => (r.co_owners || []).includes(S.userId));
+    if (!S.myRoster) throw new Error("no-roster");
+
+    // FantasyCalc supports 10/12/14-team formats; snap to the closest.
+    const qbSlots = S.slots.filter(p => p === "QB" || p === "SUPER_FLEX").length;
+    const numQbs = qbSlots >= 2 ? 2 : 1;
+    const numTeams = [10, 12, 14].reduce((a, b) =>
+      Math.abs(b - (league.total_rosters || 12)) < Math.abs(a - (league.total_rosters || 12)) ? b : a);
+
+    const vals = await getJSON(
+      `${FANTASYCALC}?isDynasty=false&numQbs=${numQbs}&numTeams=${numTeams}&ppr=0`);
+
+    S.values = {};
+    for (const v of vals) {
+      const sid = v.player && v.player.sleeperId;
+      if (!sid) continue;
+      S.values[String(sid)] = {
+        name: v.player.name,
+        pos: v.player.position,
+        team: v.player.maybeTeam || "",
+        value: v.value || 0,
+        trend: v.trend30Day || 0
+      };
+    }
+
+    const partners = rosters.filter(r => r.roster_id !== S.myRoster.roster_id);
+    $("partner").innerHTML = '<option value="">Choose a manager</option>' +
+      partners.map(r => {
+        const rec = r.settings || {};
+        return `<option value="${r.roster_id}">${esc(S.users[r.owner_id] || "Manager " + r.roster_id)} (${rec.wins || 0}-${rec.losses || 0})</option>`;
+      }).join("");
+
+    msg.innerHTML = `<p class="muted">Starting lineup: ${S.slots.map(s => SLOT_LABEL[s] || s).join(" \u00B7 ")}
+      &nbsp;\u2014&nbsp; ${numTeams}-team ${numQbs === 2 ? "superflex" : "one-QB"} values loaded.</p>`;
+  } catch (e) {
+    msg.innerHTML = '<div class="err">' +
+      (e.message === "no-roster" ? "You don't appear to own a roster in that league." : explain(e, "")) + "</div>";
+  }
+}
+
+/* ------------------------------------------------------------------
+   Look up a player. Anything FantasyCalc doesn't price (most kickers
+   and defenses in redraft) still shows up so the roster looks right,
+   just with a value of zero.
+-------------------------------------------------------------------*/
+function P(id) {
+  const v = S.values[id];
+  if (v) return v;
+  if (/^[A-Z]{2,4}$/.test(id)) return { name: id + " defense", pos: "DEF", team: id, value: 0, trend: 0 };
+  const n = S.names[id];
+  if (n) return { name: n.name, pos: n.pos, team: n.team, value: 0, trend: 0 };
+  return { name: "Player " + id, pos: "", team: "", value: 0, trend: 0 };
+}
+
+/* ------------------------------------------------------------------
+   Fill the best legal starting lineup from a set of players.
+   Slots are filled most-restrictive first (a QB-only slot before a
+   superflex), which produces the optimal assignment for the nested
+   eligibility Sleeper uses.
+-------------------------------------------------------------------*/
+function optimize(ids) {
+  const pool = ids.map(id => ({ id, ...P(id) })).filter(p => p.pos);
+  const ordered = S.slots
+    .map((slot, i) => ({ slot, i, elig: ELIG[slot] || [slot] }))
+    .sort((a, b) => a.elig.length - b.elig.length);
+
+  const used = new Set(), filled = [];
+  for (const s of ordered) {
+    let best = null;
+    for (const p of pool) {
+      if (used.has(p.id) || !s.elig.includes(p.pos)) continue;
+      if (!best || p.value > best.value) best = p;
+    }
+    if (best) used.add(best.id);
+    filled.push({ slot: s.slot, i: s.i, p: best });
+  }
+  filled.sort((a, b) => a.i - b.i);
+  return {
+    total: filled.reduce((t, f) => t + (f.p ? f.p.value : 0), 0),
+    filled,
+    bench: pool.filter(p => !used.has(p.id)).sort((a, b) => b.value - a.value)
+  };
+}
+
+/* ------------------------------------------------------------------
+   Render one roster as a column of tappable player rows, sorted by
+   value so the pieces worth trading are at the top.
+-------------------------------------------------------------------*/
+function renderRosters() {
+  const partnerId = $("partner").value;
+  if (!partnerId) { $("p-trade").classList.add("hidden"); return; }
+  S.theirRoster = S.rosters.find(r => String(r.roster_id) === String(partnerId));
+
+  $("head-mine").textContent = "You send";
+  $("head-theirs").textContent = "You get from " + (S.users[S.theirRoster.owner_id] || "them");
+
+  const draw = (ids, selected, target) => {
+    $(target).innerHTML = (ids || [])
+      .map(id => ({ id, ...P(id) }))
+      .sort((a, b) => b.value - a.value)
+      .map(p => `<button class="chip pos-${esc(p.pos)}" data-id="${esc(p.id)}" data-side="${target}"
+                    aria-pressed="${selected.has(p.id)}">
+          <span class="pos">${esc(p.pos || "\u2014")}</span>
+          <span class="nm">${esc(p.name)}<small>${esc(p.team)}${p.value ? "" : " \u00B7 not priced"}</small></span>
+          <span class="val">${p.value ? fmt(p.value) : ""}</span>
+        </button>`).join("");
+  };
+  draw(S.myRoster.players, S.send, "list-mine");
+  draw(S.theirRoster.players, S.get, "list-theirs");
+  $("p-trade").classList.remove("hidden");
+  analyze();
+}
+
+/* ------------------------------------------------------------------
+   Core analysis. Compares the best startable lineup before and after
+   the swap for both managers, and separately reports raw market value
+   so the two numbers can be seen to disagree.
+-------------------------------------------------------------------*/
+function analyze() {
+  const out = $("out");
+  if (!S.send.size && !S.get.size) {
+    out.innerHTML = "";
+    return;
+  }
+  const send = [...S.send], get = [...S.get];
+  const mine = S.myRoster.players || [], theirs = S.theirRoster.players || [];
+
+  const myAfterIds = mine.filter(p => !S.send.has(p)).concat(get);
+  const theirAfterIds = theirs.filter(p => !S.get.has(p)).concat(send);
+
+  const a = optimize(mine), b = optimize(myAfterIds);
+  const c = optimize(theirs), d = optimize(theirAfterIds);
+
+  const lineup = b.total - a.total;
+  const market = get.reduce((t, id) => t + P(id).value, 0) - send.reduce((t, id) => t + P(id).value, 0);
+  const theirLineup = d.total - c.total;
+
+  /* Per-player replacement cost: what each outgoing player actually
+     costs once the next man up slides into his slot. This is the
+     number the headline market value hides. */
+  const costs = send.map(id => {
+    const without = optimize(mine.filter(x => x !== id));
+    const promoted = without.filled.find(f => f.p && !a.filled.some(g => g.p && g.p.id === f.p.id));
+    return { id, ...P(id), cost: a.total - without.total, promoted: promoted ? promoted.p : null };
+  });
+  const gains = get.map(id => {
+    const withHim = optimize(mine.concat([id]));
+    return { id, ...P(id), add: withHim.total - a.total };
+  });
+
+  const cls = n => n > 0 ? "up" : n < 0 ? "down" : "flat";
+  const dcls = n => n > 0 ? "up" : n < 0 ? "down" : "";
+
+  out.innerHTML = `
+  <div class="verdict">
+    <div class="split">
+      <div>
+        <span class="bignum ${cls(lineup)}">${signed(lineup)}</span>
+        <p class="cap">to your starting lineup</p>
+      </div>
+      <div>
+        <span class="bignum ${cls(market)}" style="font-size:38px">${signed(market)}</span>
+        <p class="cap">in market value</p>
+      </div>
+      <div>
+        <span class="bignum ${cls(theirLineup)}" style="font-size:38px">${signed(theirLineup)}</span>
+        <p class="cap">to their starting lineup</p>
+      </div>
+    </div>
+    <p class="call">${call(lineup, market, theirLineup)}</p>
+  </div>
+
+  <section class="panel">
+    <h2>What each piece really costs you</h2>
+    <p class="hint">Market value is the price. Lineup cost is what you lose after your own bench fills the hole.</p>
+    <table>
+      <thead><tr><th>Leaving</th><th class="n">Market</th><th class="n">Lineup cost</th><th>Backfilled by</th></tr></thead>
+      <tbody>${costs.map(p =>
+        `<tr><td>${esc(p.name)} <span class="muted">${esc(p.pos)}</span></td>
+          <td class="n">${fmt(p.value)}</td>
+          <td class="n delta down">${p.cost ? "\u2212" + fmt(p.cost) : "0"}</td>
+          <td>${p.promoted ? esc(p.promoted.name) : '<span class="muted">nobody \u2014 slot goes empty</span>'}</td></tr>`
+      ).join("") || '<tr><td colspan="4" class="muted">Nothing selected on your side.</td></tr>'}
+      </tbody>
+    </table>
+    <table style="margin-top:18px">
+      <thead><tr><th>Arriving</th><th class="n">Market</th><th class="n">Lineup gain</th><th>30-day trend</th></tr></thead>
+      <tbody>${gains.map(p => `<tr><td>${esc(p.name)} <span class="muted">${esc(p.pos)}</span></td>
+          <td class="n">${fmt(p.value)}</td>
+          <td class="n delta ${dcls(p.add)}">${p.add ? signed(p.add) : "0"}</td>
+          <td class="delta ${dcls(p.trend)}">${p.trend ? signed(p.trend) : "\u2014"}</td></tr>`).join("")
+          || '<tr><td colspan="4" class="muted">Nothing selected on their side.</td></tr>'}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="panel">
+    <h2>Your starting lineup, before and after</h2>
+    <table>
+      <thead><tr><th>Slot</th><th>Now</th><th>After the trade</th></tr></thead>
+      <tbody>${a.filled.map((f, i) => {
+        const g = b.filled[i];
+        const changed = (f.p ? f.p.id : null) !== (g && g.p ? g.p.id : null);
+        return `<tr class="${changed ? "changed" : ""}">
+          <td class="cond">${esc(SLOT_LABEL[f.slot] || f.slot)}</td>
+          <td>${f.p ? esc(f.p.name) : '<span class="muted">empty</span>'}</td>
+          <td>${g && g.p ? esc(g.p.name) : '<span class="muted">empty</span>'}</td></tr>`;
+      }).join("")}</tbody>
+    </table>
+    ${depth(a, b)}
+  </section>
+
+  <section class="panel">
+    <h2>Would they take it?</h2>
+    <p class="hint">The same math run on their roster. A trade both sides gain from is the one that actually gets accepted.</p>
+    <table>
+      <thead><tr><th>Slot</th><th>Their lineup now</th><th>After</th></tr></thead>
+      <tbody>${c.filled.map((f, i) => {
+        const g = d.filled[i];
+        const changed = (f.p ? f.p.id : null) !== (g && g.p ? g.p.id : null);
+        if (!changed) return "";
+        return `<tr class="changed"><td class="cond">${esc(SLOT_LABEL[f.slot] || f.slot)}</td>
+          <td>${f.p ? esc(f.p.name) : '<span class="muted">empty</span>'}</td>
+          <td>${g && g.p ? esc(g.p.name) : '<span class="muted">empty</span>'}</td></tr>`;
+      }).join("") || '<tr><td colspan="3" class="muted">Their starting lineup does not change.</td></tr>'}</tbody>
+    </table>
+  </section>
+
+  ${send.length !== get.length ? `<div class="note warn">This deal is ${send.length} for ${get.length}.
+    Sleeper enforces roster size limits, so the manager receiving more players may need to drop someone
+    before it can go through \u2014 and that drop is a real cost this tool doesn't count.</div>` : ""}
+  `;
+}
+
+/* ------------------------------------------------------------------
+   Positional depth summary. Shows where the roster gets thin, which
+   is the part of a trade that bites three weeks later on a bye week.
+-------------------------------------------------------------------*/
+function depth(a, b) {
+  const positions = ["QB", "RB", "WR", "TE"];
+  const count = o => {
+    const m = {};
+    for (const f of o.filled) if (f.p) m[f.p.pos] = (m[f.p.pos] || 0) + 1;
+    const bench = {};
+    for (const p of o.bench) if (p.value > 0) bench[p.pos] = (bench[p.pos] || 0) + 1;
+    return { m, bench };
+  };
+  const A = count(a), B = count(b);
+  const rows = positions.map(pos => {
+    const bd = (B.bench[pos] || 0) - (A.bench[pos] || 0);
+    const topBench = b.bench.filter(p => p.pos === pos)[0];
+    return `<tr><td class="cond">${pos}</td>
+      <td class="n">${B.m[pos] || 0} starting</td>
+      <td class="n">${B.bench[pos] || 0} in reserve <span class="delta ${bd > 0 ? "up" : bd < 0 ? "down" : ""}">${bd ? "(" + signed(bd) + ")" : ""}</span></td>
+      <td>${topBench ? esc(topBench.name) + ' <span class="muted">' + fmt(topBench.value) + "</span>" : '<span class="muted">no valued backup</span>'}</td></tr>`;
+  }).join("");
+  return `<h3 style="margin:20px 0 0;font-size:19px">Depth after the trade</h3>
+    <table><thead><tr><th>Position</th><th class="n">Starters</th><th class="n">Bench</th><th>Best backup</th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
+}
+
+/* ------------------------------------------------------------------
+   Plain-language read on the two headline numbers. The interesting
+   cases are the ones where lineup value and market value disagree.
+-------------------------------------------------------------------*/
+function call(lineup, market, theirLineup) {
+  const near = Math.abs(lineup) < 150;
+  if (lineup > 0 && market < 0)
+    return "Take it. You give up more raw value than you get, but your own bench covers the position you're thinning out, so the deal still upgrades the lineup you actually start. This is the trade shape worth hunting for.";
+  if (lineup < 0 && market > 0)
+    return "Be careful. You win on paper and lose where it counts \u2014 the incoming player is stuck behind someone you already start, or the outgoing one had no replacement behind him. Value you can't put in a lineup slot doesn't score points.";
+  if (lineup > 0 && market > 0)
+    return theirLineup >= 0
+      ? "Clean upgrade on both counts, and their lineup improves too, so there's a real chance they say yes."
+      : "Clean upgrade for you on both counts. It also weakens their starting lineup, so expect a counter rather than an acceptance.";
+  if (lineup < 0 && market < 0)
+    return "You lose on both counts. Add a piece from their side or take a lesser player back.";
+  if (near)
+    return "Roughly neutral for your lineup. If you make this move, make it for a reason the numbers don't hold \u2014 schedule, bye weeks, or an injury you expect to break your way.";
+  return "Mixed. Read the per-player breakdown below before deciding.";
+}
+
+/* ------------------------------------------------------------------
+   Optional: pull Sleeper's full player dictionary to label the
+   handful of players FantasyCalc doesn't price. It's a large file,
+   so it is never fetched unless asked for.
+-------------------------------------------------------------------*/
+async function loadNames() {
+  const note = $("names-note");
+  $("btn-names").disabled = true;
+  note.innerHTML = '<span class="spin"></span>Downloading Sleeper\u2019s player list (about 5 MB \u2014 slow on cellular).';
+  try {
+    const all = await getJSON(SLEEPER + "/players/nfl");
+    S.names = {};
+    for (const [id, p] of Object.entries(all)) {
+      S.names[id] = {
+        name: p.full_name || (p.first_name || "") + " " + (p.last_name || ""),
+        pos: p.position || "", team: p.team || ""
+      };
+    }
+    note.textContent = "Names filled in. Unpriced players still count as zero value.";
+    renderRosters();
+  } catch {
+    note.textContent = "Couldn\u2019t load the player list. The names stay as they are.";
+    $("btn-names").disabled = false;
+  }
+}
+
+/* ------------------------------------------------------------------
+   Wiring. Player rows use event delegation so re-rendering a roster
+   never leaves stale listeners behind.
+-------------------------------------------------------------------*/
+$("btn-load").addEventListener("click", loadUser);
+$("uname").addEventListener("keydown", e => { if (e.key === "Enter") loadUser(); });
+$("league").addEventListener("change", loadLeague);
+$("partner").addEventListener("change", renderRosters);
+$("btn-names").addEventListener("click", loadNames);
+$("btn-clear").addEventListener("click", () => { S.send.clear(); S.get.clear(); renderRosters(); });
+
+document.addEventListener("click", e => {
+  const chip = e.target.closest(".chip");
+  if (!chip) return;
+  const id = chip.dataset.id;
+  const set = chip.dataset.side === "list-mine" ? S.send : S.get;
+  set.has(id) ? set.delete(id) : set.add(id);
+  chip.setAttribute("aria-pressed", set.has(id));
+  analyze();
+});
+</script>
+</body>
+</html>
