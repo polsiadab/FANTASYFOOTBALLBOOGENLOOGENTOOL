@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>John's Flawless Trade Tool</title>
+<title>Depth Chart — Sleeper trade analyzer</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
@@ -122,6 +122,7 @@ tr.changed td{background:#FBF6E7}
 #stage figure{margin:0;text-align:center}
 #stage .art{width:132px;height:132px;display:block;margin:0 auto;animation:spin 1200ms cubic-bezier(.3,.9,.3,1) forwards}
 #stage .art svg{width:100%;height:100%;display:block}
+#stage .art img{width:100%;height:100%;object-fit:contain;display:block}
 #stage figcaption{
   font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:26px;color:#fff;
   margin-top:14px;letter-spacing:.02em;text-shadow:0 1px 3px rgba(0,0,0,.5)
@@ -151,19 +152,21 @@ footer a{color:var(--ink)}
 <div class="wrap">
 
 <header>
-  <h1>John's Flawless Trade Tool</h1>
-  <p>Nothing is wrong with this tool. I have a poop fetish.</p>
+  <h1>Depth Chart</h1>
+  <p>A Sleeper trade analyzer that scores a deal by what it does to your starting
+     lineup, not just by what the players are worth. A star you can replace off your
+     own bench costs you less than the market price says.</p>
 </header>
 
 <!-- ============ STEP 1: find the user's leagues ============ -->
 <section class="panel" id="p-user">
   <h2>Start with your Sleeper username</h2>
-  <p class="hint">Your data will be collected and sold to malicious companies.</p>
+  <p class="hint">Public data only. Nothing is stored and nothing is sent anywhere but Sleeper and FantasyCalc.</p>
   <div class="row">
     <div>
       <label for="uname">Sleeper username</label>
       <input type="text" id="uname" autocomplete="username" autocapitalize="off"
-             autocorrect="off" spellcheck="false" placeholder="e.g. DylansCumRag">
+             autocorrect="off" spellcheck="false" placeholder="e.g. seguingis">
     </div>
     <div style="flex:0 0 auto">
       <button id="btn-load">Load my leagues</button>
@@ -214,6 +217,8 @@ footer a{color:var(--ink)}
 <!-- Verdict overlay: fires on submit, tier chosen by the lineup delta -->
 <div id="stage" aria-hidden="true"><figure><span class="art"></span><figcaption></figcaption></figure></div>
 
+<div id="asset-msg"></div>
+
 <!-- ============ STEP 4: the verdict ============ -->
 <div id="out"></div>
 
@@ -250,17 +255,17 @@ const FANTASYCALC = "https://api.fantasycalc.com/values/current";
 const METRIC = "lineup";
 const VERDICT = {
   loss: {
-    icon: "assets/loss.svg",
+    icon: "assets/loss.png",
     sound: "assets/loss.mp3",
     caption: "You lose this one"
   },
   small: {
-    icon: "assets/gain-small.svg",
+    icon: "assets/gain-small.png",
     sound: "assets/gain-small.mp3",
     caption: "Marginal win"
   },
   big: {
-    icon: "assets/gain-big.svg",
+    icon: "assets/gain-big.png",
     sound: "assets/gain-big.mp3",
     caption: "Send the offer"
   }
@@ -671,9 +676,10 @@ function showArt(t, cfg) {
   art.innerHTML = FALLBACK_ART[t] || "";
   if (cfg.icon) {
     const img = new Image();
-    img.onload = () => { art.innerHTML = ""; art.appendChild(img); };
     img.alt = "";
-    img.src = cfg.icon;                       // onerror leaves the fallback in place
+    img.onload = () => { art.innerHTML = ""; art.appendChild(img); };
+    img.onerror = () => console.warn("Icon not found, using fallback:", new URL(cfg.icon, location.href).href);
+    img.src = cfg.icon;
   }
 
   clearTimeout(stageTimer);
@@ -777,8 +783,46 @@ async function loadNames() {
    Wiring. Player rows use event delegation so re-rendering a roster
    never leaves stale listeners behind.
 -------------------------------------------------------------------*/
-$("btn-load").addEventListener("click", loadUser);
-$("uname").addEventListener("keydown", e => { if (e.key === "Enter") loadUser(); });
+/* ------------------------------------------------------------------
+   Check every configured icon and sound at startup and name the ones
+   the browser can't fetch. A missing file is silent otherwise \u2014 the
+   icon quietly falls back and the sound quietly doesn't play \u2014 which
+   makes a typo or a case mismatch very hard to spot, especially on a
+   phone where there's no console.
+-------------------------------------------------------------------*/
+async function verifyAssets() {
+  const missing = [];
+
+  const checkImage = src => new Promise(done => {
+    const i = new Image();
+    i.onload = () => done(true);
+    i.onerror = () => done(false);
+    i.src = src;
+  });
+  const checkFile = async src => {
+    try { return (await fetch(src, { method: "HEAD" })).ok; } catch { return false; }
+  };
+
+  for (const [name, cfg] of Object.entries(VERDICT)) {
+    if (cfg.icon && !(await checkImage(cfg.icon))) missing.push([name + " icon", cfg.icon]);
+    if (cfg.sound && !(await checkFile(cfg.sound))) missing.push([name + " sound", cfg.sound]);
+  }
+  if (!missing.length) return;
+
+  $("asset-msg").innerHTML = `<div class="err">
+    <strong>${missing.length} verdict file${missing.length > 1 ? "s" : ""} not found.</strong>
+    Icons fall back to the built-in shapes and those sounds stay silent.
+    The browser looked for:
+    <ul style="margin:8px 0 0;padding-left:20px">
+      ${missing.map(([k, v]) =>
+        `<li>${esc(k)} \u2014 <code>${esc(new URL(v, location.href).href)}</code></li>`).join("")}
+    </ul>
+    <p style="margin:8px 0 0">Filenames are case-sensitive once hosted on GitHub Pages,
+    even if they work from your desktop.</p></div>`;
+}
+verifyAssets();
+
+$("btn-load").addEventListener("click", loadUser);$("uname").addEventListener("keydown", e => { if (e.key === "Enter") loadUser(); });
 $("league").addEventListener("change", loadLeague);
 $("partner").addEventListener("change", renderRosters);
 $("btn-names").addEventListener("click", loadNames);
